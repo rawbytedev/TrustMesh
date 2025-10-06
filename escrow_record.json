@@ -1,0 +1,11 @@
+{
+  "escrow_id": 12,
+  "payment_id": "onchain:12",
+  "buyer": "0x...",
+  "seller": "0x...",
+  "amount": 500000000,         
+  "state": "Pending | Linked | Extended | Released | Refunded | Expired | Cancelled",
+  "shipment_id": "SHIP-123",   
+  "extended_until": null,
+  "last_event_block": 2345678
+}

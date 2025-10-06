@@ -1,0 +1,20 @@
+{
+    "pending":[
+        "escrow_id", "escrow_id2", "escrow_id...n"
+    ],
+    "linked":[
+        "escrow_id", "escrow_id2", "escrow_id...n"
+    ],
+    "expired":[
+        "escrow_id", "escrow_id2", "escrow_id...n"
+    ],
+    "cancelled":[
+        "escrow_id", "escrow_id2", "escrow_id...n"
+    ],
+    "extended":[
+        "escrow_id", "escrow_id2", "escrow_id...n"
+    ],
+    "released":[
+        "escrow_id", "escrow_id2", "escrow_id...n"
+    ]
+}

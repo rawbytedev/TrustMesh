@@ -1,0 +1,6 @@
+{
+  "escrow_id": 12,
+  "action": "release | refund | extend | none",
+  "reason": "Shipment confirmed delivered at NYC_PORT",
+  "extend_seconds": 0
+}

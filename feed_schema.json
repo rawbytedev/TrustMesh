@@ -1,0 +1,9 @@
+{
+  "escrow_id": 12,
+  "shipment_id": "SHIP-123",
+  "status": "created | in_transit | delayed | delivered | anomaly",
+  "location": "NYC_PORT",
+  "timestamp": "2025-10-14T10:00:00Z",
+  "evidence": "tracking#123456",
+  "notes": "Container scanned at gate"
+}
