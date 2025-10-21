@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Feedback Server Dashboard</title>
+        <link rel="stylesheet" href="/feedbackserver/static/style.css">
+    </head>
+    <body>
+        <h1>Shipment Dashboard</h1>
+        <table>
+            <tr><th>ID</th><th>Status</th><th>Location</th><th>Notes</th></tr>
+            {% for id, detail in shipments.items() %}
+            <tr>
+                <td>{{ id }}</td>
+                <td>{{ detail.status }}</td>
+                <td>{{ detail.location }}</td>
+                <td>{{ detail.notes }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+
+        <h2>Add / Update Shipment</h2>
+        <form method="post" action="/add">
+            <input type="text" name="id", placeholder="Shipment ID" required>
+            <input type="text" name="status", placeholder="Status" required>
+            <input type="text" name="location", placeholder="Location" required>
+            <input type="text" name="notes", placeholder="Notes">
+            <button type="submit">Save</button>
+        </form>
+    </body>
+</html>
