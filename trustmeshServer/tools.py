@@ -1,13 +1,20 @@
 """
+Contains the list of tools available and used by Ai to perform actions
+"""
+
+"""
 Handle request of data feed related to shipment of products
 will be plugged into realworld shipment feedback systems in future
 Needed by Ai
 """
 import asyncio
-import sqlite3 ## need storage
+from db import db
+
 
 class FeedCall:
-    def __init__(self, url):
+    def __init__(self, path:str="feedbackstores.db", maxdbs:int=2):
+        self.store = db(path, maxdbs)
+        self.cache  = {"id":{""}}
         pass
     ## try to get feed dfrom cache
     ## then if not present call updates()
@@ -20,6 +27,7 @@ Handle all agent interaction with Arc
 this include; smart contract registration(must be called once)
 wallet generation, peforming smart contract calls
 needed by Ai
+DB already has a cache so we only needs it
 """
 class ArcHandler:
     ## handler = ArcHandler(providerurl, contractaddress, abi, agent_key)
@@ -39,8 +47,7 @@ class ArcHandler:
 
     def handle_event(self, event):
         # Store locally (DB, file, memory)
-        print("EscrowCreated:", event["args"])
-
+        pass
 
     ## Obtain all Escrows on smartContract (active ones) // note: storage
     def GetEscrows(self):
