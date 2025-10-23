@@ -32,14 +32,26 @@ def updateshipment(status, location, notes,url):
     out = json.loads(re.text)
     print(f"shipment ID: {out["data"]["shipment_id"]}\nStatus: {out["data"]["status"]}\nlocation: {out["data"]["location"]}\nnotes: {out["data"]["notes"]}\ntimestamp: {out["data"]["timestamp"]}")
 
-## perform two thing retreive data are health if id is -1 check health
-def retrievedata(id:int=-1):
-    url = ""
-    if id == -1:
-        url = selectShipment(1)
-    else:
-        url = selectShipment(2, id)
-    return requests.get(url=url).text
-ls = {"ids":["1", "2", "3"]}
-s = requests.post(selectShipment(4), json.dumps(ls)).text
-print(s)
+
+def queryships():
+    ids = {"ids":["1", "2", "3"]}
+    if gethealth():
+        payload = json.dumps(ids)
+        res = requests.post(url+"/query", data=payload)
+        result = json.loads(res.text)
+        print(result)
+        print("Query Results")
+        [print(f"id: {i["id"]}, status: {i["status"]}, notes:{i["notes"]}")for i in result["details"]]
+        return True
+    return False
+
+def gethealth():
+    res = requests.get(url+"/health")
+    if res.status_code == 200:
+        payload = json.loads(res.text)
+        if payload["status"] == "ok":
+            return True
+    return False
+
+if __name__ == "__main__":
+    queryships()

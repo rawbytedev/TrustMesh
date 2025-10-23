@@ -2,18 +2,20 @@
 <html>
     <head>
         <title>Feedback Server Dashboard</title>
-        <link rel="stylesheet" href="/feedbackserver/static/style.css">
+        <link rel="stylesheet" href="/static/style.css">
     </head>
     <body>
         <h1>Shipment Dashboard</h1>
+        
         <table>
-            <tr><th>ID</th><th>Status</th><th>Location</th><th>Notes</th></tr>
+            <tr><th>ID</th><th>Status</th><th>Location</th><th>Notes</th><th>Timestamp</th></tr>
             {% for id, detail in shipments.items() %}
             <tr>
                 <td>{{ id }}</td>
                 <td>{{ detail.status }}</td>
                 <td>{{ detail.location }}</td>
                 <td>{{ detail.notes }}</td>
+                <td>{{ detail.timestamp }}</td>
             </tr>
             {% endfor %}
         </table>
@@ -26,5 +28,10 @@
             <input type="text" name="notes", placeholder="Notes">
             <button type="submit">Save</button>
         </form>
-    </body>
+        <form method="post" action="/autoadd">
+            <button type="submit">Auto Add</button>
+        </form>
+        
+        <p>mode: {{ debug }}</p>
+    </body> 
 </html>
