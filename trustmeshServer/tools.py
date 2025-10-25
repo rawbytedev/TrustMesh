@@ -8,12 +8,13 @@ will be plugged into realworld shipment feedback systems in future
 Needed by Ai
 """
 import asyncio
-from db import db
+from db import DB
+from langchain.tools import tool
 
 
 class FeedCall:
     def __init__(self, path:str="feedbackstores.db", maxdbs:int=2):
-        self.store = db(path, maxdbs)
+        self.store = DB(path, maxdbs)
         self.cache  = {"id":{""}}
         pass
     ## try to get feed dfrom cache
@@ -67,6 +68,22 @@ class ArcHandler:
     def FinalizeExpiredRefund(self, id, reason:str):
         pass
 
+    
+@tool("get_escrow_state", return_direct=True)
+def get_escrow_state(self, escrow_id: str) -> str:
+    """Get the current state of an escrow by ID."""
+    return f"Mock escrow {escrow_id}: status=PENDING, buyer=0x123, seller=0x456"
+        # Release funds tool
+@tool("release_funds")
+def release_funds(escrow_id: str, reason: str) -> str:
+    """Release funds to seller for a given escrow."""
+    return f"Released escrow {escrow_id} with reason: {reason}"
+
+    # Refund funds tool
+@tool("refund_funds")
+def refund_funds(escrow_id: str, reason: str) -> str:
+    """Refund buyer for a given escrow."""
+    return f"Refunded escrow {escrow_id} with reason: {reason}"
 if __name__ == "__main__":
     feed = FeedCall()
     
