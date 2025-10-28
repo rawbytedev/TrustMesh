@@ -49,6 +49,7 @@ contract TrustMeshEscrow {
         string shipmentId;       // set by seller
         State state;
         uint256 createdAt;       // block timestamp
+        uint256 linkedAt; // for hold period
         uint256 expectedBy;      // expected delivery deadline (epoch secs)
         uint256 extendedUntil;   // optional extension deadline
     }
@@ -56,9 +57,9 @@ contract TrustMeshEscrow {
     IERC20 public usdc;
     uint256 public escrowCount;
     mapping(uint256 => Escrow) public escrows;
-
+    mapping(string => uint256) public shipmentToEscrow; // uniqueness
     // --- Config ---
-    uint256 public defaultHoldDuration = 2 days;      // time-lock after link (optional)
+    uint256 public defaultHoldDuration = 2 days;      // time-lock after link
     uint256 public maxExtensionDuration = 14 days;    // cap on extension length
 
     // --- Events (with rationale for explainability) ---
@@ -70,9 +71,9 @@ contract TrustMeshEscrow {
         uint256 expectedBy
     );
     event ShipmentLinked(uint256 indexed escrowId, string shipmentId);
-    event FundsReleased(uint256 indexed escrowId, address seller, string reason);
-    event FundsRefunded(uint256 indexed escrowId, address buyer, string reason);
-    event EscrowExtended(uint256 indexed escrowId, uint256 extendedUntil, string reason);
+    event FundsReleased(uint256 indexed escrowId, address seller, string shipmentId, string reason);
+    event FundsRefunded(uint256 indexed escrowId, address buyer, string shipmentId, string reason);
+    event EscrowExtended(uint256 indexed escrowId, uint256 extendedUntil, string shipmentId, string reason);
     event EscrowExpired(uint256 indexed escrowId, string reason);
     event EscrowCancelled(uint256 indexed escrowId, string reason);
     event AgentUpdated(address indexed oldAgent, address indexed newAgent);
@@ -136,23 +137,25 @@ contract TrustMeshEscrow {
         require(msg.sender == e.seller, "Only seller");
         require(e.state == State.Pending, "Not pending");
         require(bytes(_shipmentId).length > 0, "Shipment required");
+        require(shipmentToEscrow[_shipmentId] == 0, "Shipment already linked"); // uniqueness
 
         e.shipmentId = _shipmentId;
         e.state = State.Linked;
-
+        e.linkedAt = block.timestamp;
+        shipmentToEscrow[_shipmentId] = _escrowId;
         emit ShipmentLinked(_escrowId, _shipmentId);
     }
 
     // --- AI agent decisions ---
-    function releaseFunds(uint256 _escrowId, string calldata _reason) external 	 noReentrancy {
+    function releaseFunds(uint256 _escrowId, string calldata _reason) external 	onlyAgent noReentrancy {
         Escrow storage e = escrows[_escrowId];
         require(e.state == State.Linked || e.state == State.Extended, "Not releasable");
         //  enforce a minimal hold period after link
-        require(block.timestamp >= e.createdAt + defaultHoldDuration, "Hold period");
+        require(block.timestamp >= e.linkedAt + defaultHoldDuration, "Hold period");
 
         e.state = State.Released;
         require(usdc.transfer(e.seller, e.amount), "USDC transfer failed");
-        emit FundsReleased(_escrowId, e.seller, _reason);
+        emit FundsReleased(_escrowId, e.seller, e.shipmentId, _reason);
     }
 
     function refund(uint256 _escrowId, string calldata _reason) external onlyAgent noReentrancy {
@@ -161,7 +164,7 @@ contract TrustMeshEscrow {
 
         e.state = State.Refunded;
         require(usdc.transfer(e.buyer, e.amount), "USDC transfer failed");
-        emit FundsRefunded(_escrowId, e.buyer, _reason);
+        emit FundsRefunded(_escrowId, e.buyer, e.shipmentId, _reason);
     }
 
     function extendEscrow(uint256 _escrowId, uint256 _extraSeconds, string calldata _reason) external onlyAgent {
@@ -173,7 +176,7 @@ contract TrustMeshEscrow {
         e.extendedUntil = base + _extraSeconds;
         e.state = State.Extended;
 
-        emit EscrowExtended(_escrowId, e.extendedUntil, _reason);
+        emit EscrowExtended(_escrowId, e.extendedUntil, e.shipmentId, _reason);
     }
 
     // --- Safety rails: expiry & cancellation ---
@@ -207,6 +210,6 @@ contract TrustMeshEscrow {
         require(e.state == State.Expired, "Not expired");
         e.state = State.Refunded;
         require(usdc.transfer(e.buyer, e.amount), "USDC transfer failed");
-        emit FundsRefunded(_escrowId, e.buyer, _reason);
+        emit FundsRefunded(_escrowId, e.buyer, e.shipmentId, _reason);
     }
 }
