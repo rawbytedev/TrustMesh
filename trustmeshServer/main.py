@@ -1,3 +1,4 @@
+import asyncio
 from locale import getencoding
 import os
 from typing import Sequence
@@ -6,6 +7,7 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.chat_models import init_chat_model
 from langchain.agents import initialize_agent, AgentType
 from langchain.agents import create_tool_calling_agent, AgentExecutor
+from core import BatchRunner, Cache, EscrowType, TimerScheduler
 from tools import get_escrow_state, refund_funds,release_funds
 
 tools = get_escrow_state, refund_funds, release_funds
@@ -34,5 +36,14 @@ agent = initialize_agent(
     agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
     verbose=True
 )
-"""
-"""
+
+async def main():
+    cache = Cache()
+    timers = TimerScheduler()
+    batch_runner = BatchRunner(cache)
+
+    await asyncio.gather(
+        event_listener(cache),
+        timers.run(lambda entry: cache.add(entry.escrow_id, EscrowType.LINKED)),
+        batch_runner.run(ai_callback)
+    )
