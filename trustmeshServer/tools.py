@@ -1,38 +1,18 @@
-"""
-Contains the list of tools available and used by Ai to perform actions
-"""
-
-"""
-Handle request of data feed related to shipment of products
-will be plugged into realworld shipment feedback systems in future
-Needed by Ai
-"""
 import asyncio
+import json
 from typing import List, Union
-
-from web3.auto import w3
-from db import DB
 from langchain.tools import tool
+import requests
+from core import ArcHandler, Storage, BatchRunner, TimerScheduler 
 
-## only query feed server for shipment details
-class FeedCall:
-    def __init__(self, url):
-        self.url = url
-        pass
-    
-    def get(self, id):
-        ## call using api
-        pass
-"""
-Handle all agent interaction with Arc
-this include; smart contract registration(must be called once)
-wallet generation, peforming smart contract calls
-needed by Ai
-DB already has a cache so we only needs it
-"""
+BASE = "http://127.0.0.1:8000"
+
+Arc = ArcHandler("","","","")
+store = Storage()
+Batch = BatchRunner(store.cache)
+timer = TimerScheduler()   
 
 
-Arc = ArcHandler("","","","")    
 @tool("get_escrow_state", return_direct=True)
 def get_escrow_state(self, escrow_id: str) -> str:
     """Get the current state of an escrow by ID."""
@@ -51,17 +31,37 @@ def refund_funds(escrow_id: str, reason: str) -> str:
     return f"Refunded escrow {escrow_id} with reason: {reason}"
 
 @tool("set_timer")
-def set_timer(seconds, note:str):
-    pass
-
-@tool("query_shipment")
-def get_shipment_details(ids):
-    pass
+def set_timer(escrow_id:int,seconds:int, note:str):
+    timer.set_timer(escrow_id, seconds,note)
 
 @tool("get_escrow_by_id")
-def get_escrow(id: Union[str, List[str]]):
-    if isinstance(id, str):
-        pass
+def get_escrow(id:int):
+    if isinstance(id, int):
+       details = [i for i in store.get_escrow_by_id(id)]
+       return details[-1]
+
+"""Shipment related tools and helpers"""
+@tool("query_shipment")
+def get_shipment_details(id: Union[str, List[str]]):
+    result = get_shipment(id)
+    return result if result else "None"
+
+def get_shipment(ids: Union[str, List[str]]):
+    if gethealth():
+        payload = json.dumps(ids)
+        res = requests.post(f"{BASE}/query", data=payload)
+        if res.status_code == 200:
+            return res.json()
+
+def gethealth():
+    try:
+        res = requests.get(f"{BASE}/health")
+        res.raise_for_status()
+        payload = res.json()
+        return payload.get("status") == "ok"
+    except requests.RequestException:
+        return False
+
 
 async def event_listener(cache):
         block = w3.eth.block_number
