@@ -1,3 +1,5 @@
+import json
+import logging
 import asyncio, heapq, time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -29,7 +31,10 @@ class EscrowRef:
     def __post_init__(self):
         # Priority: type first, then oldest timestamp
         self.sort_index = (self.etype.value, self.seen_count,self.first_seen_at)
-
+    
+    @property
+    def _index(self):
+        self.sort_index = (self.etype.value, self.seen_count,self.first_seen_at)
 class Cache:
     """Holds references to escrows needing AI attention."""
     def __init__(self):
@@ -56,6 +61,7 @@ class Cache:
             e.locked = True
             e.seen_count += 1
             e.last_seen_at = time.time()
+            e._index ## needed to update sort_index
         return batch
 
     def release(self, escrow_id: int):
@@ -181,40 +187,85 @@ class Storage:
 
 class ArcHandler:
     """Handle all interaction with Arc Blockchain"""
-    def __init__(self, provider_url:str, contract_address, abi:str, agent_key:str):
-        """Initialize an instance of arc handler with storage and cache"""
+    def __init__(self, provider_url:str, contract_address, abi:List[str], agent_key:str, storage:Storage):
         self.w3 = Web3(Web3.HTTPProvider(provider_url))
         self.contract = self.w3.eth.contract(address=contract_address, abi=abi)
         self.agent = self.w3.eth.account.from_key(agent_key)
-        
+        self.storage:Storage = storage  
 
     async def listen_events(self):
-        """Listen to event from smart contract on Arc then add them to cache and storage"""
-        eventfilter = self.contract.events.EscrowCreated.createfilter(fromBlock="latest")
+
+        """Listen to all escrow events and push into storage/cache."""
+        # Create filters for all relevant events
+        event_filters = {
+            "EscrowCreated": self.contract.events.EscrowCreated.create_filter(fromBlock="latest"),
+            "ShipmentLinked": self.contract.events.ShipmentLinked.create_filter(fromBlock="latest"),
+            "FundsReleased": self.contract.events.FundsReleased.create_filter(fromBlock="latest"),
+            "FundsRefunded": self.contract.events.FundsRefunded.create_filter(fromBlock="latest"),
+            "EscrowExtended": self.contract.events.EscrowExtended.create_filter(fromBlock="latest"),
+            "EscrowExpired": self.contract.events.EscrowExpired.create_filter(fromBlock="latest"),
+            "EscrowCancelled": self.contract.events.EscrowCancelled.create_filter(fromBlock="latest"),
+        }
+
         while True:
-            for event in eventfilter.getnew_entries():
-                self.handle_event(event)
+            for name, f in event_filters.items():
+                for event in f.get_new_entries():
+                    self.handle_event(event)
             await asyncio.sleep(2)
-            
 
     def handle_event(self, event):
-        # Store locally (DB, file, memory)
-        pass
+        """Decode and persist event"""
+        try:
+            escrow_id = event["args"]["escrowId"]
+            etype = event["event"]  # e.g. "EscrowCreated"
+            data = dict(event["args"])
+            logging.info(f"Event {etype} for escrow {escrow_id}")
+            # Map event name → EscrowType
+            from core import EscrowType
+            mapping = {
+                "EscrowCreated": EscrowType.CREATED,
+                "ShipmentLinked": EscrowType.LINKED,
+                "EscrowExtended": EscrowType.EXTENDED,
+                "EscrowCancelled": EscrowType.CANCELLED,
+                "EscrowExpired": EscrowType.EXPIRED,
+                "FundsRefunded": EscrowType.REFUNDED,
+                "FundsReleased": EscrowType.RELEASED,
+            }
 
-    ## Obtain all Escrows on smartContract (active ones) // note: storage
+            if etype in mapping:
+                self.storage.save_escrow_event(escrow_id=escrow_id,type= mapping[etype], event_data=json.dumps(data))
+        except Exception as e:
+            logging.error(f"Error handling event: {e}")
+
     def GetEscrows(self):
-        pass
+        """Call contract view to fetch active escrows"""
+        try:
+            return self.contract.functions.getActiveEscrows().call()
+        except Exception as e:
+            logging.error(f"Error fetching escrows: {e}")
+            return []
 
-    ## release funds to seller
+    def _send_tx(self, fn, *args):
+        """Helper to sign and send a transaction"""
+        tx = fn(*args).build_transaction({
+            "from": self.agent.address,
+            "nonce": self.w3.eth.get_transaction_count(self.agent.address),
+            "gas": 500000,
+            "gasPrice": self.w3.to_wei("5", "gwei"),
+        })
+        signed = self.agent.sign_transaction(tx)
+        tx_hash = self.w3.eth.send_raw_transaction(signed.rawTransaction)
+        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
+        return receipt
+
     def Release(self, id, reason:str):
-        pass
+        return self._send_tx(self.contract.functions.releaseFunds, id, reason)
 
-    ## refund buyer
     def Refund(self, id, reason:str):
-        pass
+        return self._send_tx(self.contract.functions.refundBuyer, id, reason)
 
     def ExtendEscrow(self, id, time, reason:str):
-        pass
+        return self._send_tx(self.contract.functions.extendEscrow, id, time, reason)
 
     def FinalizeExpiredRefund(self, id, reason:str):
-        pass
+        return self._send_tx(self.contract.functions.finalizeExpiredRefund, id, reason)

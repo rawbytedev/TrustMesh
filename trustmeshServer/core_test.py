@@ -153,3 +153,35 @@ async def test_batch_runner_stress_many_entries():
     task.cancel()
     # All 100 should eventually be processed
     assert set(results) == set(range(100))
+
+@pytest.mark.asyncio
+async def test_batch_runner_respects_escrow_ordering():
+    c = Cache()
+    # Add escrows with different priorities and slight delays
+    c.add(1, EscrowType.LINKED)     # priority 2
+    time.sleep(0.01)
+    c.add(2, EscrowType.CANCELLED)  # priority 1 (higher)
+    time.sleep(0.01)
+    c.add(3, EscrowType.EXPIRED)    # priority 0 (highest)
+
+    results = []
+    async def fake_ai(batch):
+        # Record the order escrows are flushed
+        results.extend([e.escrow_id for e in batch])
+
+    runner = BatchRunner(c, threshold=3, interval=1)
+    task = asyncio.create_task(runner.run(fake_ai))
+    await asyncio.sleep(2)
+    task.cancel()
+
+    # Assert that escrows were processed in correct priority order
+    assert results == [3, 2, 1]
+
+def test_seen_count_affects_ordering():
+    c = Cache()
+    c.add(1, EscrowType.LINKED)
+    c.add(2, EscrowType.LINKED)
+    batch1 = c.pop_batch(1)
+    batch2 = c.pop_batch(2)
+    # Escrow 1 should now have higher seen_count, so escrow 2 comes first
+    assert [e.escrow_id for e in batch2] == [2, 1]

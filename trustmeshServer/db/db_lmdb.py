@@ -49,20 +49,29 @@ class DB:
             raise DBError(f"Can't insert item: {e}")
 
     def iterate(self, prefix: str):
-        """Iterate over all keys with a given prefix (e.g. 'ec:')"""
+        """
+        Iterate over all keys in the index database with a given prefix (e.g. 'ec:').
+
+        Returns:
+            prefix_bytes = prefix.encode()  # LMDB keys must be bytes, so encode the prefix
+        """
         results = []
         with self.index.begin(write=False) as txn:
             cursor = txn.cursor()
             prefix_bytes = prefix.encode()
             if cursor.set_range(prefix_bytes):
-                for k, v in cursor:
-                    if not k.startswith(prefix_bytes):
-                        break
-                    # v is the hash_key, fetch from main DB
-                    with self.db.begin(write=False) as dtxn:
+                with self.db.begin(write=False) as dtxn:
+                    # iterate from the current cursor position and stop when keys no longer match the prefix
+                    for k, v in cursor:
+                        if not k.startswith(prefix_bytes):
+                            break
+                        # v is the hash_key, fetch from main DB
                         val = dtxn.get(v)
                         if val:
-                            results.append((k.decode(), val.decode()))
+                            # Decode key and value before appending for clarity
+                            decoded_key = k.decode()
+                            decoded_val = val.decode()
+                            results.append((decoded_key, decoded_val))
         return results
 
     def close(self):

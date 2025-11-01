@@ -53,3 +53,35 @@ def test_cache_eviction(temp_db):
     assert "a" not in temp_db.cache
     assert "b" in temp_db.cache
     assert "c" in temp_db.cache
+
+def test_iterate_returns_only_prefixed_keys(temp_db):
+    # Insert some keys with prefix "ec:" and some without
+    temp_db.put("ec:1", "value1")
+    temp_db.put("ec:2", "value2")
+    temp_db.put("ec:3", "value3")
+    temp_db.put("other:1", "othervalue")
+
+    results = temp_db.iterate("ec:")
+
+    # Convert to dict for easier assertions
+    result_dict = dict(results)
+
+    assert "ec:1" in result_dict
+    assert "ec:2" in result_dict
+    assert "ec:3" in result_dict
+    assert "other:1" not in result_dict
+
+    # Check values match
+    assert result_dict["ec:1"] == "value1"
+    assert result_dict["ec:2"] == "value2"
+    assert result_dict["ec:3"] == "value3"
+
+def test_iterate_empty_prefix_returns_all(temp_db):
+    temp_db.put("a:1", "foo")
+    temp_db.put("b:1", "bar")
+
+    results = temp_db.iterate("")  # should return everything
+    keys = [k for k, _ in results]
+
+    assert "a:1" in keys
+    assert "b:1" in keys
