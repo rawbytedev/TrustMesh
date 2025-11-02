@@ -9,11 +9,6 @@ URL = "http://127.0.0.1:8545/"
 
 w3 = Web3(Web3.HTTPProvider(URL))
 
-def encode(data: bytes) -> str:
-    return base64.b64encode(data).decode("ascii")
-
-def decode(data: str) -> bytes:
-    return base64.b64decode(data)
 
 def generateConfigAddress(path: str = "ConfigKeys.txt"):
     agent = w3.eth.account.create()
@@ -23,9 +18,9 @@ def generateConfigAddress(path: str = "ConfigKeys.txt"):
     with open(path, "w") as f:
         f.write("=== TrustMesh Config ===\n")
         f.write(f"agent_address: {agent.address}\n")
-        f.write(f"agent_priv_key_b64: {encode(agent.key)}\n")
+        f.write(f"agent_priv_key_b64: {agent.key.hex()}\n")
         f.write(f"owner_address: {owner.address}\n")
-        f.write(f"owner_priv_key_b64: {encode(owner.key)}\n")
+        f.write(f"owner_priv_key_b64: {owner.key.hex()}\n")
 
 def generateUserAddress(path: str = "DemoUserKeys.txt"):
     a1 = w3.eth.account.create()
@@ -35,10 +30,10 @@ def generateUserAddress(path: str = "DemoUserKeys.txt"):
     with open(path, "w") as f:
         f.write("=== TrustMesh Demo Users ===\n")
         f.write(f"account1_address: {a1.address}\n")
-        f.write(f"account1_priv_key_b64: {encode(a1.key)}\n")
+        f.write(f"account1_priv_key_b64: {a1.key.hex()}\n")
         f.write("---------------------------\n")
         f.write(f"account2_address: {a2.address}\n")
-        f.write(f"account2_priv_key_b64: {encode(a2.key)}\n")
+        f.write(f"account2_priv_key_b64: {a2.key.hex()}\n")
 
 
 
@@ -116,7 +111,7 @@ def generateEscrows(abi: list, contract_address: str, owner_priv_b64: str,
             for log in logs:
                 try:
                     decoded = _decode_log(contract, log)
-                    print(f"[{decoded['blockNumber']}] EscrowCreated {dict(decoded['args'])}")
+                    print(f"[{decoded['blockNumber']}] {decoded['event']} {dict(decoded['args'])}")
                 except Exception:
                     pass
             block = latest + 1
@@ -141,7 +136,7 @@ def generate_env(path=".env", contract_address=None, abi_path=None):
     agent = w3.eth.account.create()
     env_lines = [
         f"AGENT_ADDRESS={agent.address}",
-        f"AGENT_PRIV_KEY_B64={encode(agent.key)}",
+        f"AGENT_PRIV_KEY_Hex={agent.key.hex()}",
     ]
     if contract_address:
         env_lines.append(f"CONTRACT_ADDRESS={Web3.to_checksum_address(contract_address)}")
