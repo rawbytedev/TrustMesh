@@ -1,5 +1,6 @@
 import asyncio, time, pytest
 from core import Cache, EscrowType, TimerScheduler, BatchRunner
+import logging
 
 @pytest.mark.asyncio
 async def test_cache_add_and_pop():

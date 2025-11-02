@@ -3,6 +3,7 @@ import json
 import time
 from web3 import Web3
 from web3._utils.events import get_event_data
+from web3.contract import Contract
 
 URL = "http://127.0.0.1:8545/"
 
@@ -57,7 +58,7 @@ def generateEscrows(abi: list, contract_address: str, owner_priv_b64: str,
                     buyer_priv_b64: str, seller_priv_b64: str, usdcabi):
 
     # --- Default accounts (preserved from your code) ---
-    owner = w3.eth.account.from_key("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
+    agent = w3.eth.account.from_key("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d")
     buyer = w3.eth.account.from_key("0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a")
     seller = w3.eth.account.from_key("0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6")
 
@@ -103,15 +104,6 @@ def generateEscrows(abi: list, contract_address: str, owner_priv_b64: str,
     sent = w3.eth.send_raw_transaction(signed.raw_transaction)
     receipt = w3.eth.wait_for_transaction_receipt(sent)
 
-    # Decode escrow logs with escrow ABI
-    for log in receipt["logs"]:
-        if log["address"].lower() == contract_address.lower():
-            try:
-                decoded = contract.events.EscrowCreated().process_log(log)
-                print("EscrowCreated:", dict(decoded["args"]))
-            except Exception:
-                pass
-
     # --- Step 3: Continuous polling (optional) ---
     while True:
         latest = w3.eth.block_number
@@ -123,12 +115,28 @@ def generateEscrows(abi: list, contract_address: str, owner_priv_b64: str,
             })
             for log in logs:
                 try:
-                    decoded = contract.events.EscrowCreated().process_log(log)
+                    decoded = _decode_log(contract, log)
                     print(f"[{decoded['blockNumber']}] EscrowCreated {dict(decoded['args'])}")
                 except Exception:
                     pass
             block = latest + 1
         time.sleep(2)
+
+def _decode_log(contract:Contract,log):
+        for ev in [
+        contract.events.EscrowCreated,
+        contract.events.ShipmentLinked,
+        contract.events.FundsReleased,
+        contract.events.FundsRefunded,
+        contract.events.EscrowExtended,
+        contract.events.EscrowExpired,
+        contract.events.EscrowCancelled,
+    ]:
+            try:
+                return ev().process_log(log)
+            except Exception:
+                continue
+        return None
 def generate_env(path=".env", contract_address=None, abi_path=None):
     agent = w3.eth.account.create()
     env_lines = [

@@ -11,7 +11,12 @@ pragma solidity ^0.8.20;
  */
 
 interface IERC20 {
-    function transferFrom(address from, address to, uint256 value) external returns (bool);
+    function transferFrom(
+        address from,
+        address to,
+        uint256 value
+    ) external returns (bool);
+
     function transfer(address to, uint256 value) external returns (bool);
 }
 
@@ -40,18 +45,26 @@ contract TrustMeshEscrow {
     }
 
     // --- Escrow state ---
-    enum State { Pending, Linked, Released, Refunded, Extended, Expired, Cancelled }
+    enum State {
+        Pending,
+        Linked,
+        Released,
+        Refunded,
+        Extended,
+        Expired,
+        Cancelled
+    }
 
     struct Escrow {
         address buyer;
         address seller;
         uint256 amount;
-        string shipmentId;       // set by seller
+        string shipmentId; // set by seller
         State state;
-        uint256 createdAt;       // block timestamp
+        uint256 createdAt; // block timestamp
         uint256 linkedAt; // for hold period
-        uint256 expectedBy;      // expected delivery deadline (epoch secs)
-        uint256 extendedUntil;   // optional extension deadline
+        uint256 expectedBy; // expected delivery deadline (epoch secs)
+        uint256 extendedUntil; // optional extension deadline
     }
 
     IERC20 public usdc;
@@ -59,8 +72,8 @@ contract TrustMeshEscrow {
     mapping(uint256 => Escrow) public escrows;
     mapping(string => uint256) public shipmentToEscrow; // uniqueness
     // --- Config ---
-    uint256 public defaultHoldDuration = 2 days;      // time-lock after link
-    uint256 public maxExtensionDuration = 14 days;    // cap on extension length
+    uint256 public defaultHoldDuration = 2 days; // time-lock after link
+    uint256 public maxExtensionDuration = 14 days; // cap on extension length
 
     // --- Events (with rationale for explainability) ---
     event EscrowCreated(
@@ -71,14 +84,32 @@ contract TrustMeshEscrow {
         uint256 expectedBy
     );
     event ShipmentLinked(uint256 indexed escrowId, string shipmentId);
-    event FundsReleased(uint256 indexed escrowId, address seller, string shipmentId, string reason);
-    event FundsRefunded(uint256 indexed escrowId, address buyer, string shipmentId, string reason);
-    event EscrowExtended(uint256 indexed escrowId, uint256 extendedUntil, string shipmentId, string reason);
+    event FundsReleased(
+        uint256 indexed escrowId,
+        address seller,
+        string shipmentId,
+        string reason
+    );
+    event FundsRefunded(
+        uint256 indexed escrowId,
+        address buyer,
+        string shipmentId,
+        string reason
+    );
+    event EscrowExtended(
+        uint256 indexed escrowId,
+        uint256 extendedUntil,
+        string shipmentId,
+        string reason
+    );
     event EscrowExpired(uint256 indexed escrowId, string reason);
     event EscrowCancelled(uint256 indexed escrowId, string reason);
     event AgentUpdated(address indexed oldAgent, address indexed newAgent);
     event OwnerUpdated(address indexed oldOwner, address indexed newOwner);
-    event ConfigUpdated(uint256 defaultHoldDuration, uint256 maxExtensionDuration);
+    event ConfigUpdated(
+        uint256 defaultHoldDuration,
+        uint256 maxExtensionDuration
+    );
 
     constructor(address _usdc, address _agent) {
         require(_usdc != address(0), "USDC required");
@@ -100,15 +131,25 @@ contract TrustMeshEscrow {
         owner = _newOwner;
     }
 
-    function updateConfig(uint256 _defaultHoldDuration, uint256 _maxExtensionDuration) external onlyOwner {
-        require(_maxExtensionDuration >= _defaultHoldDuration, "Config invalid");
+    function updateConfig(
+        uint256 _defaultHoldDuration,
+        uint256 _maxExtensionDuration
+    ) external onlyOwner {
+        require(
+            _maxExtensionDuration >= _defaultHoldDuration,
+            "Config invalid"
+        );
         defaultHoldDuration = _defaultHoldDuration;
         maxExtensionDuration = _maxExtensionDuration;
         emit ConfigUpdated(defaultHoldDuration, maxExtensionDuration);
     }
 
     // --- Buyer creates escrow and deposits USDC ---
-    function createEscrow(address _seller, uint256 _amount, uint256 _expectedBy) external noReentrancy returns (uint256) {
+    function createEscrow(
+        address _seller,
+        uint256 _amount,
+        uint256 _expectedBy
+    ) external noReentrancy returns (uint256) {
         require(_seller != address(0) && _seller != msg.sender, "Bad seller");
         require(_amount > 0, "Amount must be > 0");
         require(_expectedBy > block.timestamp, "Expected date must be future");
@@ -125,14 +166,26 @@ contract TrustMeshEscrow {
         e.extendedUntil = 0;
 
         // Pull USDC from buyer
-        require(usdc.transferFrom(msg.sender, address(this), _amount), "USDC transfer failed");
+        require(
+            usdc.transferFrom(msg.sender, address(this), _amount),
+            "USDC transfer failed"
+        );
 
-        emit EscrowCreated(escrowCount, msg.sender, _seller, _amount, _expectedBy);
+        emit EscrowCreated(
+            escrowCount,
+            msg.sender,
+            _seller,
+            _amount,
+            _expectedBy
+        );
         return escrowCount;
     }
 
     // --- Seller links shipment to escrow ---
-    function linkShipment(uint256 _escrowId, string calldata _shipmentId) external {
+    function linkShipment(
+        uint256 _escrowId,
+        string calldata _shipmentId
+    ) external {
         Escrow storage e = escrows[_escrowId];
         require(msg.sender == e.seller, "Only seller");
         require(e.state == State.Pending, "Not pending");
@@ -147,30 +200,55 @@ contract TrustMeshEscrow {
     }
 
     // --- AI agent decisions ---
-    function releaseFunds(uint256 _escrowId, string calldata _reason) external 	onlyAgent noReentrancy {
+    function releaseFunds(
+        uint256 _escrowId,
+        string calldata _reason
+    ) external onlyAgent noReentrancy {
         Escrow storage e = escrows[_escrowId];
-        require(e.state == State.Linked || e.state == State.Extended, "Not releasable");
+        require(
+            e.state == State.Linked || e.state == State.Extended,
+            "Not releasable"
+        );
         //  enforce a minimal hold period after link
-        require(block.timestamp >= e.linkedAt + defaultHoldDuration, "Hold period");
+        require(
+            block.timestamp >= e.linkedAt + defaultHoldDuration,
+            "Hold period"
+        );
 
         e.state = State.Released;
         require(usdc.transfer(e.seller, e.amount), "USDC transfer failed");
         emit FundsReleased(_escrowId, e.seller, e.shipmentId, _reason);
     }
 
-    function refund(uint256 _escrowId, string calldata _reason) external onlyAgent noReentrancy {
+    function refund(
+        uint256 _escrowId,
+        string calldata _reason
+    ) external onlyAgent noReentrancy {
         Escrow storage e = escrows[_escrowId];
-        require(e.state == State.Linked || e.state == State.Extended, "Not refundable");
+        require(
+            e.state == State.Linked || e.state == State.Extended,
+            "Not refundable"
+        );
 
         e.state = State.Refunded;
         require(usdc.transfer(e.buyer, e.amount), "USDC transfer failed");
         emit FundsRefunded(_escrowId, e.buyer, e.shipmentId, _reason);
     }
 
-    function extendEscrow(uint256 _escrowId, uint256 _extraSeconds, string calldata _reason) external onlyAgent {
+    function extendEscrow(
+        uint256 _escrowId,
+        uint256 _extraSeconds,
+        string calldata _reason
+    ) external onlyAgent {
         Escrow storage e = escrows[_escrowId];
-        require(e.state == State.Linked || e.state == State.Extended, "Not extendable");
-        require(_extraSeconds > 0 && _extraSeconds <= maxExtensionDuration, "Bad extension");
+        require(
+            e.state == State.Linked || e.state == State.Extended,
+            "Not extendable"
+        );
+        require(
+            _extraSeconds > 0 && _extraSeconds <= maxExtensionDuration,
+            "Bad extension"
+        );
 
         uint256 base = e.extendedUntil == 0 ? e.expectedBy : e.extendedUntil;
         e.extendedUntil = base + _extraSeconds;
@@ -183,9 +261,14 @@ contract TrustMeshEscrow {
     // Anyone can mark expired when deadline passed (transparent state), but only agent/buyer triggers outcomes.
     function markExpired(uint256 _escrowId, string calldata _reason) external {
         Escrow storage e = escrows[_escrowId];
-        require(e.state == State.Linked || e.state == State.Extended, "Bad state");
+        require(
+            e.state == State.Linked || e.state == State.Extended,
+            "Bad state"
+        );
 
-        uint256 deadline = e.extendedUntil == 0 ? e.expectedBy : e.extendedUntil;
+        uint256 deadline = e.extendedUntil == 0
+            ? e.expectedBy
+            : e.extendedUntil;
         require(block.timestamp > deadline, "Not expired");
 
         e.state = State.Expired;
@@ -193,7 +276,10 @@ contract TrustMeshEscrow {
     }
 
     // Buyer can cancel if never linked and past expectedBy (e.g seller never shipped)
-    function cancelUnlinked(uint256 _escrowId, string calldata _reason) external noReentrancy {
+    function cancelUnlinked(
+        uint256 _escrowId,
+        string calldata _reason
+    ) external noReentrancy {
         Escrow storage e = escrows[_escrowId];
         require(msg.sender == e.buyer, "Only buyer");
         require(e.state == State.Pending, "Not pending");
@@ -205,11 +291,45 @@ contract TrustMeshEscrow {
     }
 
     // agent can finalize expired escrows to refund buyer
-    function finalizeExpiredRefund(uint256 _escrowId, string calldata _reason) external onlyAgent noReentrancy {
+    function finalizeExpiredRefund(
+        uint256 _escrowId,
+        string calldata _reason
+    ) external onlyAgent noReentrancy {
         Escrow storage e = escrows[_escrowId];
         require(e.state == State.Expired, "Not expired");
         e.state = State.Refunded;
         require(usdc.transfer(e.buyer, e.amount), "USDC transfer failed");
         emit FundsRefunded(_escrowId, e.buyer, e.shipmentId, _reason);
+    }
+
+    function getEscrow(
+        uint256 id
+    )
+        external
+        view
+        returns (
+            address buyer,
+            address seller,
+            uint256 amount,
+            string memory shipmentId,
+            State state,
+            uint256 createdAt,
+            uint256 linkedAt,
+            uint256 expectedBy,
+            uint256 extendedUntil
+        )
+    {
+        Escrow storage e = escrows[id];
+        return (
+            e.buyer,
+            e.seller,
+            e.amount,
+            e.shipmentId,
+            e.state,
+            e.createdAt,
+            e.linkedAt,
+            e.expectedBy,
+            e.extendedUntil
+        );
     }
 }
