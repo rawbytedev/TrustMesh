@@ -1,3 +1,0 @@
-agent_priv_key:b'1KOM/6xCNkgoNnwMi0O19mDEEm0x3IBkb5i0B63J/cY='
-=======================
-owner_priv_key:b'cFd3AeVEuiQk6j8utPwb0/LBXub6Fv+wcE46Joatrqg='

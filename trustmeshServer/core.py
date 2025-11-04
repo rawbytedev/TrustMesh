@@ -184,6 +184,13 @@ class Storage:
             if key in data:
                 return (p, data[key])
         return None
+    
+    def save_shipment_states(self, ids, details):
+        self.db.put(f"ship:{ids}", details["details"])
+
+    def get_shipment_state(self, ids):
+        return self.db.get(f"ship:{ids}")
+        
     def _prefix(self, t: EscrowType) -> str:
         return {
         EscrowType.CREATED: "ec",
@@ -197,11 +204,11 @@ class Storage:
 
 class ArcHandler:
     """Handle all interaction with Arc Blockchain"""
-    def __init__(self, provider_url:str, contract_address, abi:List[str], agent_key:str, storage:Storage):
-        self.w3 = Web3(Web3.HTTPProvider(provider_url))
-        self.contract = self.w3.eth.contract(address=contract_address, abi=abi)
-        self.agent = self.w3.eth.account.from_key(agent_key)
-        self.storage:Storage = storage  
+    def __init__(self, provider_url:str=None, contract_address=None, abi:List[str]=None, agent_key:str=None, storage:Storage=None):
+        self.w3 = Web3(Web3.HTTPProvider(provider_url)) if provider_url else None
+        self.contract = self.w3.eth.contract(address=contract_address, abi=abi) if contract_address else None
+        self.agent = self.w3.eth.account.from_key(agent_key) if agent_key else None
+        self.storage:Storage = storage  if storage else Storage()
 
     async def listen_events(self, from_block: Optional[int]=None):
         """Listen to all escrow events and push into storage/cache."""
@@ -281,7 +288,7 @@ class ArcHandler:
             "gasPrice": self.w3.to_wei("5", "gwei"),
         })
         signed = self.agent.sign_transaction(tx)
-        tx_hash = self.w3.eth.send_raw_transaction(signed.rawTransaction)
+        tx_hash = self.w3.eth.send_raw_transaction(signed.raw_transaction)
         receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
         return dict(receipt)
 
@@ -292,8 +299,15 @@ class ArcHandler:
     def Refund(self, id, reason:str):
         return self._send_tx(self.contract.functions.refund, id, reason)
 
-    def ExtendEscrow(self, id, time, reason:str):
-        return self._send_tx(self.contract.functions.extendEscrow, id, time, reason)
+    def ExtendEscrow(self, id, secs, reason:str):
+        return self._send_tx(self.contract.functions.extendEscrow, id, secs, reason)
 
     def FinalizeExpiredRefund(self, id, reason:str):
         return self._send_tx(self.contract.functions.finalizeExpiredRefund, id, reason)
+    
+    def _check_shipment(self, id):
+        """Peform a additionnal check to ensure that shipment was indeed delivered"""
+        val = self.storage.get_latest(id) ## the latest should either be LINKED or EXTENDED
+        if val:
+            valdict = json.loads(val[1])
+            print(valdict["shipmentid"])

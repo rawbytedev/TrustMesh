@@ -1,7 +1,7 @@
 import asyncio, time, pytest
-from core import Cache, EscrowType, TimerScheduler, BatchRunner
+from core import ArcHandler, Cache, EscrowType, Storage, TimerScheduler, BatchRunner
 import logging
-
+import json
 @pytest.mark.asyncio
 async def test_cache_add_and_pop():
     c = Cache()
@@ -186,3 +186,36 @@ def test_seen_count_affects_ordering():
     batch2 = c.pop_batch(2)
     # Escrow 1 should now have higher seen_count, so escrow 2 comes first
     assert [e.escrow_id for e in batch2] == [2, 1]
+
+
+def test_decode_log_returns_none_for_unknown():
+    pytest.skip("Live testing")
+    storage = Storage()
+    abi_path = "../dev-tools/trustmesh_abi.json"
+    with open(abi_path) as f:
+        abi = json.load(f)
+    arc = ArcHandler("http://localhost:8545", "0x"+"1"*40, [], "0x"+"1"*64, storage)
+    # Patch contract events to always raise
+    arc.contract.events = []
+    assert arc._decode_log({"dummy":"log"}) is None
+### 
+"""class DummyStorage(Storage):
+    def __init__(self):
+        self.saved = []
+    def save_escrow_event(self, escrow_id, type, event_data):
+        self.saved.append((escrow_id, type, event_data))
+
+def test_handle_event_saves_to_storage():
+    storage = DummyStorage()
+    arc = ArcHandler("http://localhost:8545", "0x0", [], "0x"+"1"*64, storage)
+
+    event = {
+        "args": {"escrowId": 42, "buyer":"0xB","seller":"0xS"},
+        "event": "EscrowCreated"
+    }
+    arc.handle_event(event)
+    assert storage.saved[0][0] == 42
+    assert storage.saved[0][1] == EscrowType.CREATED
+    assert json.loads(storage.saved[0][2])["escrowId"] == 42
+
+"""

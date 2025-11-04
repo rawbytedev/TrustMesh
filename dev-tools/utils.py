@@ -18,9 +18,9 @@ def generateConfigAddress(path: str = "ConfigKeys.txt"):
     with open(path, "w") as f:
         f.write("=== TrustMesh Config ===\n")
         f.write(f"agent_address: {agent.address}\n")
-        f.write(f"agent_priv_key_b64: {agent.key.hex()}\n")
+        f.write(f"agent_priv_key_hex: 0x{agent.key.hex()}\n")
         f.write(f"owner_address: {owner.address}\n")
-        f.write(f"owner_priv_key_b64: {owner.key.hex()}\n")
+        f.write(f"owner_priv_key_hex: 0x{owner.key.hex()}\n")
 
 def generateUserAddress(path: str = "DemoUserKeys.txt"):
     a1 = w3.eth.account.create()
@@ -30,10 +30,10 @@ def generateUserAddress(path: str = "DemoUserKeys.txt"):
     with open(path, "w") as f:
         f.write("=== TrustMesh Demo Users ===\n")
         f.write(f"account1_address: {a1.address}\n")
-        f.write(f"account1_priv_key_b64: {a1.key.hex()}\n")
+        f.write(f"account1_priv_key_hex: 0x{a1.key.hex()}\n")
         f.write("---------------------------\n")
         f.write(f"account2_address: {a2.address}\n")
-        f.write(f"account2_priv_key_b64: {a2.key.hex()}\n")
+        f.write(f"account2_priv_key_hex: 0x{a2.key.hex()}\n")
 
 
 
@@ -62,7 +62,7 @@ def generateEscrows(abi: list, contract_address: str, owner_priv_b64: str,
 
     expectedby = w3.eth.get_block("latest")["timestamp"] + 3 * 24 * 3600
     block = w3.eth.block_number
-    amount = 400
+    amount = 10000
 
     # --- Build contract instances ---
     contract = w3.eth.contract(address=contract_address, abi=abi)

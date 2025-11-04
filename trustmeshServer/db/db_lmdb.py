@@ -46,7 +46,7 @@ class DB:
             with self.index.begin(write=True) as txn:
                 txn.put(key.encode(), hash_key)
         except Exception as e:
-            raise DBError(f"Can't insert item: {e}")
+            raise DBError(f"Can't insert item: {key}:{value}")
 
     def iterate(self, prefix: str):
         """

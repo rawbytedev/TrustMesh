@@ -1,0 +1,5 @@
+__pycache__
+TrustMesh.code-workspace
+trustmeshServer/config.json
+dev-tools/public.txt
+dev-tools/private.txt

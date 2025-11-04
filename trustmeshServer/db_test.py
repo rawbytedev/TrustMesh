@@ -7,6 +7,7 @@ import os
 import tempfile
 import pytest
 from db import DB, DBError
+from core import EscrowType, Storage
 
 @pytest.fixture
 def temp_db():
@@ -85,3 +86,40 @@ def test_iterate_empty_prefix_returns_all(temp_db):
 
     assert "a:1" in keys
     assert "b:1" in keys
+
+class DummyDB(DB):
+    def __init__(self):
+        self.store = {}
+    def put(self, key, value):
+        self.store[key] = value
+    def get(self, key):
+        return self.store.get(key)
+
+def test_get_latest_returns_correct_state():
+    db = DummyDB()
+    storage = Storage(db=db)
+
+    # Insert CREATED and then REFUNDED
+    storage.save_escrow_event(1, EscrowType.CREATED, "created-data")
+    storage.save_escrow_event(1, EscrowType.REFUNDED, "refunded-data")
+
+    latest = storage.get_latest(1)
+    assert latest[0] == "rf"
+    assert latest[1] == "refunded-data"
+
+def test_get_latest_none_if_no_data():
+    db = DummyDB()
+    storage = Storage(db=db)
+    assert storage.get_latest(99) is None
+
+def test_save_shipment():
+    ships ={
+        "details":[{
+            "Shipid":"ship-12",
+            "state":"transit"
+        }]
+    }
+    db =DummyDB()
+    store = Storage(db)
+    store.save_shipment_states("ship-12",ships)
+    assert store.get_shipment_state("ship-12") == ships["details"]

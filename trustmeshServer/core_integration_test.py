@@ -1,6 +1,6 @@
 # core_integration_test.py
 import asyncio, time, pytest
-from core import Cache, EscrowType, TimerScheduler, BatchRunner, Storage
+from core import ArcHandler, Cache, EscrowType, TimerScheduler, BatchRunner, Storage
 from db import DB
 
 class DummyDB:
@@ -60,3 +60,14 @@ async def test_full_pipeline_lifecycle():
     # Escrow 3 should have been reintroduced into cache
     assert 3 in cache._entries
     assert reintroduced == [3]
+
+def test_check_shipment():
+    cache = Cache()
+    db = DB()
+    storage = Storage(db=db, cache=cache)
+    scheduler = TimerScheduler()
+    arc = ArcHandler()
+    arc.storage.save_escrow_event(17, EscrowType.LINKED, "{\"shipmentid\":\"123\"}")
+    arc._check_shipment(17)
+
+test_check_shipment()

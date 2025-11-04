@@ -1,6 +1,6 @@
 import json
 from typing import List, Union
-from langchain.tools import tool
+from langchain.tools import StructuredTool, tool
 import requests
 from core import ArcHandler, Storage, TimerScheduler
 
@@ -34,25 +34,30 @@ def make_tools(arc:ArcHandler, storage:Storage, timer:TimerScheduler):
         return f"Finalized expired escrow {escrow_id}, refunded buyer, reason '{reason}', tx={receipt['transactionHash'].hex()}"
 
     @tool("query_shipment")
-    def query_shipment(ids: Union[str, List[str]]) -> str:
-        """Query shipment details by ID or list of IDs from external service."""
+    def query_shipment(id: str) -> str:
+        """Query shipment details by ID from external service."""
         try:
-            res = requests.post(f"{BASE}/query", data=json.dumps(ids))
+            res = requests.post(f"{BASE}/query", data=json.dumps(id))
             if res.status_code == 200:
+                storage.save_shipment_states(id, res.json())
                 return json.dumps(res.json())
             return f"Error {res.status_code}: {res.text}"
         except Exception as e:
             return f"Shipment query failed: {e}"
     
     @tool("set_timer")
-    def set_timer(escrow_id:int, seconds:int, reason:str):
-        timer.set_timer(escrow_id, seconds, reason)
-        return f"Timer set for escrow {escrow_id} in {seconds}s: {reason}"
+    def set_timer(escrow_id:int, seconds:int, notes:str) -> str:
+        "schedules a timer"
+        timer.set_timer(escrow_id, seconds, notes)
+        return f"Timer set for escrow {escrow_id} in {seconds}s: {notes}"
 
     @tool("get_escrow_by_id")
     def get_escrow_by_id(escrow_id: int) -> str:
-        states = storage.get_escrow_by_id(escrow_id)
-        return "s"
+        """Return the latest state of an Escrow"""
+        state = storage.get_latest(escrow_id)
+        if state:
+            return state[1]
+        return f"Escrow for {escrow_id} not found"
     
     return [get_escrow_by_id, set_timer, 
             query_shipment, release_funds,

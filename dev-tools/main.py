@@ -5,6 +5,7 @@ if __name__ == "__main__":
     print("1 - Generate Config Addresses (agent, owner)")
     print("2 - Generate User Addresses (buyer, seller)")
     print("3 - Generate Demo escrows (emit and decode events)")
+    
     select = int(input("~> "))
 
     if select == 1:
