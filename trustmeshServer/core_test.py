@@ -2,39 +2,42 @@ import asyncio, time, pytest
 from core import ArcHandler, Cache, EscrowType, Storage, TimerScheduler, BatchRunner
 import logging
 import json
+
 @pytest.mark.asyncio
 async def test_cache_add_and_pop():
     c = Cache()
-    c.add(1, EscrowType.LINKED)
-    c.add(2, EscrowType.EXPIRED)
-    batch = c.pop_batch(2)
+    await c.add(1, EscrowType.LINKED)
+    await c.add(2, EscrowType.EXPIRED)
+    batch = await c.pop_batch(2)
     assert len(batch) == 2
     assert batch[0].etype == EscrowType.EXPIRED  # priority ordering
-import pytest, asyncio, time
 
-def test_cache_add_and_retrieve():
+@pytest.mark.asyncio
+async def test_cache_add_and_retrieve():
     c = Cache()
-    c.add(1, EscrowType.EXPIRED)
-    c.add(2, EscrowType.LINKED)
+    await c.add(1, EscrowType.EXPIRED)
+    await c.add(2, EscrowType.LINKED)
     assert 1 in c._entries
     assert 2 in c._entries
     assert c._entries[1].etype == EscrowType.EXPIRED
 
-def test_cache_pop_batch_respects_priority_and_order():
+@pytest.mark.asyncio
+async def test_cache_pop_batch_respects_priority_and_order():
     c = Cache()
     # Lower enum value = higher priority
-    c.add(1, EscrowType.CANCELLED)  # priority 1
+    await c.add(1, EscrowType.CANCELLED)  # priority 1
     time.sleep(0.01)
-    c.add(2, EscrowType.LINKED)     # priority 2
-    batch = c.pop_batch(2)
+    await c.add(2, EscrowType.LINKED)     # priority 2
+    batch = await c.pop_batch(2)
     assert [e.escrow_id for e in batch] == [1, 2]
     assert all(e.locked for e in batch)
     assert all(e.seen_count == 1 for e in batch)
 
-def test_cache_release_removes_entry():
+@pytest.mark.asyncio
+async def test_cache_release_removes_entry():
     c = Cache()
-    c.add(42, EscrowType.EXPIRED)
-    c.release(42)
+    await c.add(42, EscrowType.EXPIRED)
+    await c.release(42)
     assert 42 not in c._entries
 
 @pytest.mark.asyncio
@@ -77,7 +80,7 @@ async def test_timer_scheduler_orders_multiple():
 async def test_batch_runner_triggers():
     c = Cache()
     for i in range(5):
-        c.add(i, EscrowType.LINKED)
+        await c.add(i, EscrowType.LINKED)
     results = []
     async def fake_ai(batch): results.extend([e.escrow_id for e in batch])
     runner = BatchRunner(c, threshold=5, interval=1)
@@ -97,7 +100,7 @@ async def test_batch_runner_triggers_on_threshold():
     task = asyncio.create_task(runner.run(fake_ai))
 
     for i in range(3):
-        c.add(i, EscrowType.LINKED)
+        await c.add(i, EscrowType.LINKED)
 
     await asyncio.sleep(1.5)
     task.cancel()
@@ -112,7 +115,7 @@ async def test_batch_runner_triggers_on_interval():
     runner = BatchRunner(c, threshold=10, interval=1)
     task = asyncio.create_task(runner.run(fake_ai))
 
-    c.add(42, EscrowType.LINKED)
+    await c.add(42, EscrowType.LINKED)
     await asyncio.sleep(1.5)
     task.cancel()
     assert results == [42]
@@ -126,11 +129,11 @@ async def test_batch_runner_multiple_batches():
     runner = BatchRunner(c, threshold=2, interval=10)
     task = asyncio.create_task(runner.run(fake_ai))
 
-    c.add(1, EscrowType.LINKED)
-    c.add(2, EscrowType.LINKED)
+    await c.add(1, EscrowType.LINKED)
+    await c.add(2, EscrowType.LINKED)
     await asyncio.sleep(1.2)
-    c.add(3, EscrowType.CANCELLED)
-    c.add(4, EscrowType.EXPIRED)
+    await c.add(3, EscrowType.CANCELLED)
+    await c.add(4, EscrowType.EXPIRED)
     await asyncio.sleep(1.2)
     task.cancel()
 
@@ -148,7 +151,7 @@ async def test_batch_runner_stress_many_entries():
     task = asyncio.create_task(runner.run(fake_ai))
 
     for i in range(100):
-        c.add(i, EscrowType.LINKED)
+        await c.add(i, EscrowType.LINKED)
 
     await asyncio.sleep(3)
     task.cancel()
@@ -159,11 +162,11 @@ async def test_batch_runner_stress_many_entries():
 async def test_batch_runner_respects_escrow_ordering():
     c = Cache()
     # Add escrows with different priorities and slight delays
-    c.add(1, EscrowType.LINKED)     # priority 2
+    await c.add(1, EscrowType.LINKED)     # priority 2
     time.sleep(0.01)
-    c.add(2, EscrowType.CANCELLED)  # priority 1 (higher)
+    await c.add(2, EscrowType.CANCELLED)  # priority 1 (higher)
     time.sleep(0.01)
-    c.add(3, EscrowType.EXPIRED)    # priority 0 (highest)
+    await c.add(3, EscrowType.EXPIRED)    # priority 0 (highest)
 
     results = []
     async def fake_ai(batch):
@@ -178,12 +181,13 @@ async def test_batch_runner_respects_escrow_ordering():
     # Assert that escrows were processed in correct priority order
     assert results == [3, 2, 1]
 
-def test_seen_count_affects_ordering():
+@pytest.mark.asyncio
+async def test_seen_count_affects_ordering():
     c = Cache()
-    c.add(1, EscrowType.LINKED)
-    c.add(2, EscrowType.LINKED)
-    batch1 = c.pop_batch(1)
-    batch2 = c.pop_batch(2)
+    await c.add(1, EscrowType.LINKED)
+    await c.add(2, EscrowType.LINKED)
+    batch1 = await c.pop_batch(1)
+    batch2 = await c.pop_batch(2)
     # Escrow 1 should now have higher seen_count, so escrow 2 comes first
     assert [e.escrow_id for e in batch2] == [2, 1]
 

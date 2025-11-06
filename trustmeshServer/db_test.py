@@ -95,22 +95,24 @@ class DummyDB(DB):
     def get(self, key):
         return self.store.get(key)
 
-def test_get_latest_returns_correct_state():
+@pytest.mark.asyncio
+async def test_get_latest_returns_correct_state():
     db = DummyDB()
     storage = Storage(db=db)
 
     # Insert CREATED and then REFUNDED
-    storage.save_escrow_event(1, EscrowType.CREATED, "created-data")
-    storage.save_escrow_event(1, EscrowType.REFUNDED, "refunded-data")
+    await storage.save_escrow_event(1, EscrowType.CREATED, "created-data")
+    await storage.save_escrow_event(1, EscrowType.REFUNDED, "refunded-data")
 
-    latest = storage.get_latest(1)
+    latest = await storage.get_latest(1)
     assert latest[0] == "rf"
     assert latest[1] == "refunded-data"
 
-def test_get_latest_none_if_no_data():
+@pytest.mark.asyncio
+async def test_get_latest_none_if_no_data():
     db = DummyDB()
     storage = Storage(db=db)
-    assert storage.get_latest(99) is None
+    assert await storage.get_latest(99) is None
 
 def test_save_shipment():
     ships ={

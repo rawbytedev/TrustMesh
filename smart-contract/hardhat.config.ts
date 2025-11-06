@@ -36,6 +36,12 @@ const config: HardhatUserConfig = {
       url: configVariable("SEPOLIA_RPC_URL"),
       accounts: [configVariable("SEPOLIA_PRIVATE_KEY")],
     },
+    arc: {
+    type: "http",
+    url: "https://rpc.testnet.arc.network",
+    accounts: ["0x7982c19440df8b962ae37919a3a434f3b81ed394b6fcf26643016396fca427a0"],
+    chainType:"l1",
+    }
   },
 };
 

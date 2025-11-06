@@ -28,9 +28,9 @@ async def test_full_pipeline_lifecycle():
     runner = BatchRunner(cache, threshold=2, interval=1)
 
     # Step 1: Save events into storage (CREATED doesn't go to cache, LINKED does)
-    storage.save_escrow_event(1, EscrowType.CREATED, "created-data")
-    storage.save_escrow_event(1, EscrowType.LINKED, "linked-data")
-    storage.save_escrow_event(2, EscrowType.EXPIRED, "expired-data")
+    await storage.save_escrow_event(1, EscrowType.CREATED, "created-data")
+    await storage.save_escrow_event(1, EscrowType.LINKED, "linked-data")
+    await storage.save_escrow_event(2, EscrowType.EXPIRED, "expired-data")
 
     # At this point, cache should contain escrows 1 (LINKED) and 2 (EXPIRED)
     assert set(cache._entries.keys()) == {1, 2}
@@ -49,7 +49,7 @@ async def test_full_pipeline_lifecycle():
     reintroduced = []
     async def timer_cb(entry):
         # When timer fires, re-add escrow to cache
-        cache.add(entry.escrow_id, EscrowType.LINKED)
+        await cache.add(entry.escrow_id, EscrowType.LINKED)
         reintroduced.append(entry.escrow_id)
 
     scheduler.set_timer(3, delay=1, reason="retry")
@@ -61,13 +61,12 @@ async def test_full_pipeline_lifecycle():
     assert 3 in cache._entries
     assert reintroduced == [3]
 
-def test_check_shipment():
+@pytest.mark.asyncio
+async def test_check_shipment():
     cache = Cache()
     db = DB()
     storage = Storage(db=db, cache=cache)
     scheduler = TimerScheduler()
     arc = ArcHandler()
-    arc.storage.save_escrow_event(17, EscrowType.LINKED, "{\"shipmentid\":\"123\"}")
-    arc._check_shipment(17)
-
-test_check_shipment()
+    await arc.storage.save_escrow_event(17, EscrowType.LINKED, "{\"shipmentId\":\"123\"}")
+    assert await arc._check_shipment(17) == "123"

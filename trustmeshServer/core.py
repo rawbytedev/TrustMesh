@@ -38,36 +38,42 @@ class EscrowRef:
         self.sort_index = (self.etype.value, self.seen_count,self.first_seen_at)
 class Cache:
     """Holds references to escrows needing AI attention."""
+    logging.info("Cache started")
     def __init__(self):
         self._entries: Dict[int, EscrowRef] = {}
         self._lock = asyncio.Lock()
 
-    def add(self, escrow_id: int, etype: EscrowType):
-        if escrow_id not in self._entries:
-            now = time.time()
-            self._entries[escrow_id] = EscrowRef(
-                escrow_id=escrow_id,
-                etype=etype,
-                first_seen_at=now,
-                last_seen_at=now
-            )
+    async def add(self, escrow_id: int, etype: EscrowType):
+        logging.info(f"CACHE: adding {escrow_id}:{etype}")
+        async with self._lock:
+            if escrow_id not in self._entries:
+                now = time.time()
+                self._entries[escrow_id] = EscrowRef(
+                    escrow_id=escrow_id,
+                    etype=etype,
+                    first_seen_at=now,
+                    last_seen_at=now
+                )
 
-    def pop_batch(self, size: int) -> List[EscrowRef]:
+    async def pop_batch(self, size: int) -> List[EscrowRef]:
         """
         Selects a batch of escrows for processing, marking them as locked, but does NOT remove them from the cache.
         Caller is responsible for releasing (removing) them after processing.
         """
-        batch = sorted(self._entries.values())[:size]
-        for e in batch:
-            e.locked = True
-            e.seen_count += 1
-            e.last_seen_at = time.time()
-            e.refresh_index() ## needed to update sort_index
-        return batch
+        async with self._lock:
+            batch = sorted(self._entries.values())[:size]
+            for e in batch:
+                e.locked = True
+                e.seen_count += 1
+                e.last_seen_at = time.time()
+                e.refresh_index() ## needed to update sort_index
+            return batch
 
-    def release(self, escrow_id: int):
+    async def release(self, escrow_id: int):
         """Release (remove) an escrow from the cache."""
-        self._entries.pop(escrow_id, None)
+        logging.info(f"CACHE: releasing {escrow_id} ")
+        async with self._lock:
+            self._entries.pop(escrow_id, None)
 
     def clear(self):
         """Clear all entries."""
@@ -90,6 +96,7 @@ class TimerScheduler:
     def stop(self):
         self._stop = True
     def set_timer(self, escrow_id: int, delay: int, reason: str):
+        logging.info(f"TIMER: setting timer {escrow_id} delay: {delay}, reason:{reason}")
         entry = TimerEntry(due_at=time.time() + delay, escrow_id=escrow_id, reason=reason)
         heapq.heappush(self._heap, entry)
 
@@ -124,19 +131,19 @@ class BatchRunner:
             if should_trigger:
                 # Decide how many to take
                 size = self.threshold if len(self.cache._entries) >= self.threshold else len(self.cache._entries)
-                batch = self.cache.pop_batch(size)
+                logging.info(f"BatchRunner: Processing {size} escrowsS")
+                batch = await self.cache.pop_batch(size)
                 if batch:
                     try:
+                        logging.info("BatchRunner: Waiting for Ai")
                         await ai_callback(batch)
                         for e in batch:
-                            self.cache.release(e.escrow_id)
+                            await self.cache.release(e.escrow_id)
                     except Exception as e:
-                        logging.error(f"Batch Runner error: {e}")
+                        logging.error(f"BatchRunner: error: {e}")
                         for e in batch:
                             e.locked = False
-                            e.seen_count +=1
-                            e.refresh_index()
-                    self._last_run = now
+                self._last_run = now
 
             await asyncio.sleep(1)
 
@@ -146,22 +153,25 @@ class Storage:
         self.db = db if db else DB()
         self.cache = cache if cache else Cache()
         self.states = ["ec","lk","ex","cn","xp","rf","rl"]  # escrow states prefixes
-    def save_escrow_event(self, escrow_id: int, type:EscrowType,event_data: str):
+    async def save_escrow_event(self, escrow_id: int, type:EscrowType,event_data: str):
         """Save escrow event data based on type.
         CREATED events are stored but not added to cache.
         LINKED, EXTENDED, CANCELLED, EXPIRED events are added to cache for AI processing.
         REFUNDED and RELEASED events are stored but not added to cache. they don't need AI attention. and represent final states.
         """
         if type in (EscrowType.REFUNDED, EscrowType.RELEASED, EscrowType.CREATED):
+            logging.info(f"Storage: saving {type}:{escrow_id}")
             self.db.put(f"{self._prefix(type)}:{escrow_id}", event_data)
             return
         # Only non-terminal events go to cache
+        logging.info(f"Storage: saving terminal {type}:{escrow_id}")
         key = f"{self._prefix(type)}:{escrow_id}"
         self.db.put(key, event_data)
-        self.cache.add(escrow_id, type)
+        await self.cache.add(escrow_id, type)
 
     def get_escrow_by_id(self, escrow_id: int) -> Dict[str, str]:
         """Retrieve escrow data by checking all possible states."""
+        logging.info(f"Retrieving escrow states: {escrow_id}")
         keys = [f"{state}:{escrow_id}" for state in self.states]
         result = {}
         for key in keys:
@@ -173,7 +183,8 @@ class Storage:
                 pass
         return result
     
-    def get_latest(self, escrow_id: int) -> Optional[tuple[str, str]]:
+    async def get_latest(self, escrow_id: int) -> Optional[tuple[str, str]]:
+        logging.info(f"Retrieving latest states: {escrow_id}")
         data = self.get_escrow_by_id(escrow_id)
         if not data:
             return None
@@ -184,7 +195,6 @@ class Storage:
             if key in data:
                 return (p, data[key])
         return None
-    
     def save_shipment_states(self, ids, details):
         self.db.put(f"ship:{ids}", details["details"])
 
@@ -212,16 +222,19 @@ class ArcHandler:
 
     async def listen_events(self, from_block: Optional[int]=None):
         """Listen to all escrow events and push into storage/cache."""
+        logging.info("ArcHandler: Started Event listener")
         start = from_block or self.w3.eth.block_number
         while True:
             latest = self.w3.eth.block_number
             if latest >= start:
                 logs = self.w3.eth.get_logs({"fromBlock": start, "toBlock": latest, "address": self.contract.address})
+                logging.info("ArcHandler: captured event logs")
                 for log in logs:
                     try:
                         decoded = self._decode_log(log)
                         if decoded:
-                            self.handle_event(decoded)
+                            
+                            await self.handle_event(decoded)
                     except Exception as e:
                         logging.error(f"Decode error: {e}")
                 start = latest + 1
@@ -244,10 +257,9 @@ class ArcHandler:
                 continue
         return None
     
-    async def block_scan(self):
-        pass
-    def handle_event(self, event):
+    async def handle_event(self, event):
         """Decode and persist event"""
+        logging.info("ArcHandler: Started Processing Event")
         try:
             escrow_id = event["args"]["escrowId"]
             etype = event["event"]  # e.g. "EscrowCreated"
@@ -266,11 +278,11 @@ class ArcHandler:
             }
 
             if etype in mapping:
-                self.storage.save_escrow_event(escrow_id=escrow_id,type= mapping[etype], event_data=json.dumps(data))
+                await self.storage.save_escrow_event(escrow_id=escrow_id,type= mapping[etype], event_data=json.dumps(data))
         except Exception as e:
             logging.error(f"Error handling event: {e}")
-
-## still experimental
+    
+    ## unused
     def GetEscrows(self):
         """Call contract view to fetch active escrows"""
         try:
@@ -292,22 +304,22 @@ class ArcHandler:
         receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
         return dict(receipt)
 
-    def Release(self, id, reason:str):
+    async def Release(self, id, reason:str):
         """add query shipment"""
-        return self._send_tx(self.contract.functions.releaseFunds, id, reason)
+        return await asyncio.to_thread(self._send_tx, self.contract.functions.releaseFunds, id, reason)
 
-    def Refund(self, id, reason:str):
-        return self._send_tx(self.contract.functions.refund, id, reason)
+    async def Refund(self, id, reason:str):
+        return await asyncio.to_thread(self._send_tx, self.contract.functions.refund, id, reason)
 
-    def ExtendEscrow(self, id, secs, reason:str):
-        return self._send_tx(self.contract.functions.extendEscrow, id, secs, reason)
+    async def ExtendEscrow(self, id, secs, reason:str):
+        return await asyncio.to_thread(self._send_tx, self.contract.functions.extendEscrow, id, secs, reason)
 
-    def FinalizeExpiredRefund(self, id, reason:str):
-        return self._send_tx(self.contract.functions.finalizeExpiredRefund, id, reason)
+    async def FinalizeExpiredRefund(self, id, reason:str):
+        return await asyncio.to_thread(self._send_tx, self.contract.functions.finalizeExpiredRefund, id, reason)
     
-    def _check_shipment(self, id):
+    async def _check_shipment(self, id):
         """Peform a additionnal check to ensure that shipment was indeed delivered"""
-        val = self.storage.get_latest(id) ## the latest should either be LINKED or EXTENDED
+        val = await self.storage.get_latest(id) ## the latest should either be LINKED or EXTENDED
         if val:
             valdict = json.loads(val[1])
-            print(valdict["shipmentid"])
+            return valdict["shipmentId"]
