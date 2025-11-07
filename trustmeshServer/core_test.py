@@ -25,7 +25,7 @@ async def test_cache_add_and_retrieve():
 async def test_cache_pop_batch_respects_priority_and_order():
     c = Cache()
     # Lower enum value = higher priority
-    await c.add(1, EscrowType.CANCELLED)  # priority 1
+    await c.add(1, EscrowType.EXPIRED)  # priority 1
     time.sleep(0.01)
     await c.add(2, EscrowType.LINKED)     # priority 2
     batch = await c.pop_batch(2)
@@ -164,7 +164,7 @@ async def test_batch_runner_respects_escrow_ordering():
     # Add escrows with different priorities and slight delays
     await c.add(1, EscrowType.LINKED)     # priority 2
     time.sleep(0.01)
-    await c.add(2, EscrowType.CANCELLED)  # priority 1 (higher)
+    await c.add(2, EscrowType.EXTENDED)  # priority 1 (higher)
     time.sleep(0.01)
     await c.add(3, EscrowType.EXPIRED)    # priority 0 (highest)
 

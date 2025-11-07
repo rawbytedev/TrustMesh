@@ -39,10 +39,10 @@ def make_tools(arc: ArcHandler, storage: Storage, timer: TimerScheduler):
         """Query shipment details by ID from external service."""
         try:
             async with httpx.AsyncClient() as client:
-                res = await client.post(f"{BASE}/query", data=json.dumps(id))
+                res = await client.post(f"{BASE}/query", data=json.dumps({"ids":id}))
                 if res.status_code == 200:
                     storage.save_shipment_states(id, res.json())
-                    return json.dumps(res.json())
+                    return res.json()
                 return f"Error {res.status_code}: {res.text}"
         except Exception as e:
             return f"Shipment query failed: {e}"
@@ -54,16 +54,15 @@ def make_tools(arc: ArcHandler, storage: Storage, timer: TimerScheduler):
         return f"Timer set for escrow {escrow_id} in {seconds}s: {notes}"
 
     @tool("get_escrow_by_id")
-    async def get_escrow_by_id(escrow_id: int) -> str:
+    async def get_escrow_by_id(escrow_id: int) -> tuple[str,str]:
         """Return the latest state of an Escrow"""
         state = await storage.get_latest(escrow_id)
         if state:
-            logging.info(f"Found escrow {escrow_id} in storage")
-            return state[1]
-        return f"Escrow for {escrow_id} not found"
+            logging.info(f"Found escrow #{escrow_id} in storage")
+            return state
+        return f"Escrow for {escrow_id} not found", "None"
     
     return [get_escrow_by_id, set_timer, 
-            query_shipment, release_funds,
-            refund_funds, extend_escrow,
+            query_shipment, release_funds, refund_funds,extend_escrow,
             finalize_expired_refund
             ]

@@ -21,23 +21,12 @@ def Basetool():
     Basetools = {t.name: t for t in make_tools(arc, storage, timer)}
     
     return Basetools
-
-@pytest.mark.asyncio
-async def test_release_and_refund_tools(Basetool):
-    out = await Basetool["release_funds"].coroutine(1, "ok")
-    assert "Released escrow 1" in out
-    out = await Basetool["refund_funds"].coroutine(2, "bad")
-    assert "Refunded escrow 2" in out
     
 @pytest.mark.asyncio
 async def test_release_tool(Basetool):
     out = await Basetool["release_funds"].coroutine(1, "ok")
     assert "Released escrow 1" in out
 
-@pytest.mark.asyncio
-async def test_refund_tool(Basetool):
-    out = await Basetool["refund_funds"].coroutine(2, "buyer issue")
-    assert "Refunded escrow 2" in out
 
 @pytest.mark.asyncio
 async def test_extend_tool(Basetool):
@@ -48,6 +37,12 @@ async def test_extend_tool(Basetool):
 async def test_finalize_tool(Basetool):
     out = await Basetool["finalize_expired_refund"].coroutine(4, "expired")
     assert "Finalized expired escrow 4" in out
+
+@pytest.mark.asyncio
+async def test_refund_tool(Basetool):
+    out = await Basetool["refund_funds"].coroutine(5, "refund")
+    assert "Refunded escrow 5 with reason refund" in out
+
 
 """
 def test_query_shipment(monkeypatch, Basetool):

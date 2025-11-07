@@ -72,8 +72,8 @@ contract TrustMeshEscrow {
     mapping(uint256 => Escrow) public escrows;
     mapping(string => uint256) public shipmentToEscrow; // uniqueness
     // --- Config ---
-    uint256 public defaultHoldDuration = 2 days; // time-lock after link
-    uint256 public maxExtensionDuration = 14 days; // cap on extension length
+    uint256 public defaultHoldDuration = 30 seconds; // 2 daystime-lock after link
+    uint256 public maxExtensionDuration = 60 seconds; // 14 dayscap on extension length
 
     // --- Events (with rationale for explainability) ---
     event EscrowCreated(

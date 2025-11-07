@@ -11,13 +11,13 @@ from db import DB
 class EscrowType(Enum):
     # Lower value = higher AI priority (EXPIRED highest)
     EXPIRED = 0
-    CANCELLED = 1
+    EXTENDED = 1 # close to being finalized
     LINKED = 2
-    EXTENDED = 3
     ## those doesn't need AI attention
-    CREATED = 4
-    REFUNDED = 5 # terminal
-    RELEASED = 6 # terminal
+    CREATED = 3
+    REFUNDED = 4 # terminal
+    RELEASED = 5 # terminal
+    CANCELLED = 6 # terminal refund is automatic
 
 @dataclass(order=True)
 class EscrowRef:
@@ -44,7 +44,7 @@ class Cache:
         self._lock = asyncio.Lock()
 
     async def add(self, escrow_id: int, etype: EscrowType):
-        logging.info(f"CACHE: adding {escrow_id}:{etype}")
+        logging.info(f"Cache: adding {escrow_id}:{etype.name}")
         async with self._lock:
             if escrow_id not in self._entries:
                 now = time.time()
@@ -71,7 +71,7 @@ class Cache:
 
     async def release(self, escrow_id: int):
         """Release (remove) an escrow from the cache."""
-        logging.info(f"CACHE: releasing {escrow_id} ")
+        logging.info(f"Cache: releasing {escrow_id} ")
         async with self._lock:
             self._entries.pop(escrow_id, None)
 
@@ -96,7 +96,7 @@ class TimerScheduler:
     def stop(self):
         self._stop = True
     def set_timer(self, escrow_id: int, delay: int, reason: str):
-        logging.info(f"TIMER: setting timer {escrow_id} delay: {delay}, reason:{reason}")
+        logging.info(f"TimerScheduler: setting timer {escrow_id} delay: {delay}, reason:{reason}")
         entry = TimerEntry(due_at=time.time() + delay, escrow_id=escrow_id, reason=reason)
         heapq.heappush(self._heap, entry)
 
@@ -131,9 +131,10 @@ class BatchRunner:
             if should_trigger:
                 # Decide how many to take
                 size = self.threshold if len(self.cache._entries) >= self.threshold else len(self.cache._entries)
-                logging.info(f"BatchRunner: Processing {size} escrowsS")
+                
                 batch = await self.cache.pop_batch(size)
                 if batch:
+                    logging.info(f"BatchRunner: Processing {size} escrows")
                     try:
                         logging.info("BatchRunner: Waiting for Ai")
                         await ai_callback(batch)
@@ -155,23 +156,24 @@ class Storage:
         self.states = ["ec","lk","ex","cn","xp","rf","rl"]  # escrow states prefixes
     async def save_escrow_event(self, escrow_id: int, type:EscrowType,event_data: str):
         """Save escrow event data based on type.
-        CREATED events are stored but not added to cache.
-        LINKED, EXTENDED, CANCELLED, EXPIRED events are added to cache for AI processing.
-        REFUNDED and RELEASED events are stored but not added to cache. they don't need AI attention. and represent final states.
+        CREATED ,CANCELLED, RELEASED, REFUNDED events are stored but not added to cache.
+        LINKED, EXTENDED, EXPIRED events are added to cache for AI processing.
+        EXTENDED is transition from LINKED
+        EXPIRED is transition from EXTENDED(hold period)
         """
-        if type in (EscrowType.REFUNDED, EscrowType.RELEASED, EscrowType.CREATED):
-            logging.info(f"Storage: saving {type}:{escrow_id}")
+        if type in (EscrowType.REFUNDED, EscrowType.CANCELLED ,EscrowType.RELEASED, EscrowType.CREATED):
+            logging.info(f"Storage: saving terminal states {type}:{escrow_id}")
             self.db.put(f"{self._prefix(type)}:{escrow_id}", event_data)
             return
         # Only non-terminal events go to cache
-        logging.info(f"Storage: saving terminal {type}:{escrow_id}")
+        logging.info(f"Storage: saving for processing {type}:{escrow_id}")
         key = f"{self._prefix(type)}:{escrow_id}"
         self.db.put(key, event_data)
         await self.cache.add(escrow_id, type)
 
     def get_escrow_by_id(self, escrow_id: int) -> Dict[str, str]:
         """Retrieve escrow data by checking all possible states."""
-        logging.info(f"Retrieving escrow states: {escrow_id}")
+        logging.info(f"Retrieving escrow state: #{escrow_id}")
         keys = [f"{state}:{escrow_id}" for state in self.states]
         result = {}
         for key in keys:

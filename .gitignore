@@ -3,3 +3,10 @@ TrustMesh.code-workspace
 trustmeshServer/config.json
 dev-tools/public.txt
 dev-tools/private.txt
+smart-contract/.env
+trustmeshServer/.config.json
+trustmeshServer/.env
+trustmeshServer/cli.py
+.gitignore
+trustmeshServer/trutmesh.log
+trustmeshServer/db/__pycache__

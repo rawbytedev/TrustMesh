@@ -1,3 +1,4 @@
+import json
 import lmdb as tool
 from collections import OrderedDict
 from utils import dighash
@@ -26,10 +27,10 @@ class DB:
             return self.cache[key]
         with self.db.begin(write=False) as txn:
             hash_key = dighash(key.encode())
-            val = txn.get(hash_key)
-            if val is None:
+            value = txn.get(hash_key)
+            if value is None:
                 raise DBError(f"Value for key {key} not found")
-            decoded = val.decode()
+            decoded = json.loads(value.decode())
             self._cache_set(key, decoded)
             return decoded
 
@@ -39,13 +40,15 @@ class DB:
         if not value:
             raise DBError("Value can't be empty")
         self._cache_set(key, value)
+        val = json.dumps(value)
         hash_key = dighash(key.encode())
         try:
             with self.db.begin(write=True) as txn:
-                txn.put(hash_key, value.encode())
+                txn.put(hash_key, val.encode())
             with self.index.begin(write=True) as txn:
                 txn.put(key.encode(), hash_key)
         except Exception as e:
+            print(e)
             raise DBError(f"Can't insert item: {key}:{value}")
 
     def iterate(self, prefix: str):
@@ -70,7 +73,7 @@ class DB:
                         if val:
                             # Decode key and value before appending for clarity
                             decoded_key = k.decode()
-                            decoded_val = val.decode()
+                            decoded_val = json.loads(val.decode())
                             results.append((decoded_key, decoded_val))
         return results
 
