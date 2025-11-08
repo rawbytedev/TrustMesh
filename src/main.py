@@ -22,7 +22,7 @@ def load_config(path="config.json"):
         os.environ[key] = str(value)
 
 #load_config()
-with open("prompts/system_prompt.txt") as f:
+with open("./src/prompts/system_prompt.txt") as f:
     system_prompt = f.read()
 
 
