@@ -43,7 +43,7 @@ provider_url = os.getenv("CHAIN_URL", "127.0.0.1")
 contract_address = os.getenv("CONTRACT_ADDRESS")
 agent_key = os.getenv("AGENT_KEY", "0x0")
 
-with open("./trustmesh.json") as f:
+with open("./src/trustmesh.json") as f:
     abi = json.load(f)
 # --- Mapping prefixes to EscrowType ---
 PREFIX_TO_ETYPE = {
