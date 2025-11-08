@@ -3,6 +3,7 @@ import logging
 import json, time
 from typing import List, Optional
 from web3 import Web3
+from web3.contract import Contract
 
 USDC_DECIMALS = 6
 logging.basicConfig(level=logging.INFO)
@@ -39,13 +40,13 @@ def buyer_menu(arc, cfg, w3):
         if choice == "1":
             seller = input("Seller address: ")
             if seller == "":
-                seller = w3.eth.account.from_key(cfg["seller_key"]).address
-            CreateEscrow(arc, cfg["buyer_key"], w3, seller)
+                seller = w3.eth.account.from_key(cfg["SELLER_KEY"]).address
+            CreateEscrow(arc, cfg["BUYER_KEY"], w3, seller)
         if choice == "2":
             seller = input("Seller address(empty for default): ")
             if seller == "":
-                seller = w3.eth.account.from_key(cfg["seller_key"]).address
-            cancelUnlinked(arc, cfg["buyer_key"], w3)
+                seller = w3.eth.account.from_key(cfg["SELLER_KEY"]).address
+            cancelUnlinked(arc, cfg["BUYER_KEY"], w3)
         elif choice == "b":
             return
 
@@ -56,7 +57,7 @@ def seller_menu(arc, cfg, w3):
         print("[b] Back")
         choice = input("> ")
         if choice == "1":
-            LinkEscrow(arc, cfg["seller_key"], w3)
+            LinkEscrow(arc, cfg["SELLER_KEY"], w3)
         elif choice == "b":
             return
 
@@ -89,7 +90,7 @@ def Expiredflow(arc, buyer, seller, w3, count:int=3):
     res = CreateEscrow(arc, f"0x{buyer.key.hex()}", w3, seller.address, 100, expected_by=120)## extended
     escrows.append(res)
     for i in range(count):
-        LinkEscrow(arc, f"0x{seller.key.hex()}", w3, escrows[i], shipment_id=f"ship-xr-{i}")
+        LinkEscrow(arc, f"0x{seller.key.hex()}", w3, escrows[i], shipment_id=f"ship-xr-{escrows[i]}")
     ## time limit 60s
     print("waiting for escrow to expire")
     time.sleep(60)
@@ -112,12 +113,12 @@ def Cancelledflow(arc, buyer, seller, w3, count:int=3):
     escrows = []
     cancelled = []
     for i in range(count):
-        res = CreateEscrow(arc, buyer, w3, seller.address, 100, expected_by=30)## wait for call to succeed
+        res = CreateEscrow(arc, f"0x{buyer.key.hex()}", w3, seller.address, 100, expected_by=30)## wait for call to succeed
         escrows.append(res)
     print("Waiting for expected date to past")
     time.sleep(30)
     for i in range(count):
-        res = cancelUnlinked(arc, buyer, w3, escrows[i])
+        res = cancelUnlinked(arc, f"0x{buyer.key.hex()}", w3, escrows[i])
         cancelled.append(res)
     if len(escrows) == len(cancelled):
         print("CancelledUnlinked successfull")
@@ -135,7 +136,6 @@ def _send_tx(fn, key, w3, *args):
         tx = fn(*args).build_transaction({
             "from": account.address,
             "nonce": w3.eth.get_transaction_count(account.address),
-            "gas": 500000,
             "gasPrice": w3.to_wei("5", "gwei"),
         })
         signed = account.sign_transaction(tx)
@@ -146,10 +146,10 @@ def _send_tx(fn, key, w3, *args):
         logs.error(f"Transaction failed: {e}", exc_info=True)
         return None
 
-def CreateEscrow(arc, buyer_key, w3, seller_addr, amount:int=None, expected_by:int=None):
-    escrow_amount = amount or int(input("Escrow amount -> "))
+def CreateEscrow(arc, BUYER_KEY, w3, seller_addr, amount:int=None, expected_by:int=None):
+    escrow_amount = amount if amount else int(input("Escrow amount -> "))
     expected_by = (int(time.time())+expected_by) if expected_by else int(time.time()) + 30
-    receipt = _send_tx(arc.contract.functions.createEscrow, buyer_key, w3, seller_addr, escrow_amount, expected_by)
+    receipt = _send_tx(arc.contract.functions.createEscrow, BUYER_KEY, w3, seller_addr, escrow_amount, expected_by)
     if not receipt:
         return None
     for log in receipt["logs"]:
@@ -159,10 +159,10 @@ def CreateEscrow(arc, buyer_key, w3, seller_addr, amount:int=None, expected_by:i
             logs.info(f"Escrow created: {escrow_id}")
             return escrow_id
 
-def LinkEscrow(arc, seller_key, w3, escrow_id=None, shipment_id=None):
+def LinkEscrow(arc, SELLER_KEY, w3, escrow_id=None, shipment_id=None):
     escrow_id = escrow_id or int(input("Escrow ID: "))
     shipment_id = shipment_id or input("Shipment ID: ")
-    receipt = _send_tx(arc.contract.functions.linkShipment, seller_key, w3, escrow_id, shipment_id)
+    receipt = _send_tx(arc.contract.functions.linkShipment, SELLER_KEY, w3, escrow_id, shipment_id)
     if not receipt:
         return None
     for log in receipt["logs"]:
@@ -173,10 +173,10 @@ def LinkEscrow(arc, seller_key, w3, escrow_id=None, shipment_id=None):
             logs.info(f"Shipment linked: {escrow_id} -> {shipment_id}")
             return escrow_id
 
-def cancelUnlinked(arc, buyer_key, w3, escrow_id=None, reason="Demo"):
-    escrow_id = escrow_id or int(input("Escrow ID: "))
+def cancelUnlinked(arc, BUYER_KEY, w3, escrow_id=None, reason="Demo"):
+    escrow_id = escrow_id if escrow_id else int(input("Escrow ID: "))
     reason = reason or input("Reason: ")
-    receipt = _send_tx(arc.contract.functions.cancelUnlinked, buyer_key, w3, escrow_id, reason)
+    receipt = _send_tx(arc.contract.functions.cancelUnlinked, BUYER_KEY, w3, escrow_id, reason)
     if not receipt:
         return None
     for log in receipt["logs"]:
@@ -186,10 +186,10 @@ def cancelUnlinked(arc, buyer_key, w3, escrow_id=None, reason="Demo"):
             logs.info(f"Escrow cancelled: {escrow_id}")
             return escrow_id
 
-def markExpired(arc, buyer_key, w3, escrow_id=None, reason="Demo"):
-    escrow_id = escrow_id or int(input("Escrow ID: "))
+def markExpired(arc, BUYER_KEY, w3, escrow_id=None, reason="Demo"):
+    escrow_id = escrow_id if escrow_id else int(input("Escrow ID: "))
     reason = reason or input("Reason: ")
-    receipt = _send_tx(arc.contract.functions.markExpired, buyer_key, w3, escrow_id, reason)
+    receipt = _send_tx(arc.contract.functions.markExpired, BUYER_KEY, w3, escrow_id, reason)
     if not receipt:
         return None
     for log in receipt["logs"]:
@@ -214,11 +214,11 @@ def capture_events(arc, w3, start_block):
             for log in clogs:
                 decoded = _decode_log(arc.contract, log)
                 if decoded:
-                    logs.info(f"[{decoded['blockNumber']}] {decoded['event']} {dict(decoded['args'])}")
+                    logs.info(f"[{decoded['blockNumber']}] {decoded['event']} {dict(decoded['args'])} txhash:{decoded['transactionHash'].hex()}")
             start_block = latest + 1
         time.sleep(2)
 
-def _decode_log(contract, log):
+def _decode_log(contract: Contract, log):
     for ev in [
         contract.events.EscrowCreated,
         contract.events.ShipmentLinked,
@@ -235,8 +235,8 @@ def _decode_log(contract, log):
     return None
 
 def loaddemo(arc, cfg, w3):
-    buyer = w3.eth.account.from_key(cfg["buyer_key"])
-    seller = w3.eth.account.from_key(cfg["seller_key"])
+    buyer = w3.eth.account.from_key(cfg["BUYER_KEY"])
+    seller = w3.eth.account.from_key(cfg["SELLER_KEY"])
     logs.info(f"Demo loaded with buyer={buyer.address}, seller={seller.address}, RPC={cfg['CHAIN_URL']}")
 
     menu = {

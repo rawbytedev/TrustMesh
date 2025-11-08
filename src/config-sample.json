@@ -1,0 +1,23 @@
+{
+  "BUYER_KEY": "0x..", 
+  "SELLER_KEY": "0x..",
+  "hold_hours": 1,
+  "MODEL_API_KEY":"",
+  "MODEL_NAME":"gpt-4.1-mini",
+  "MODEL_TEMPERATURE":0.2,
+  "MODEL_MAX_TOKENS":4000,
+  "MODEL_PROVIDERS":"openai",
+  "PORT":8080,
+  "CHAIN_URL":"http://127.0.0.1:8545/", 
+  "AGENT_KEY":"0x..",
+  "CONTRACT_ADDRESS":"0x..",
+  "ABI_PATH":"./trustmesh.json"
+}
+### profile.py(config.json)
+{
+  "BUYER_KEY": "0x..",
+  "SELLER_KEY": "0x..",
+  "CHAIN_URL":"http://127.0.0.1:8545/",
+  "ABI_PATH":"./trustmesh.json",
+  "CONTRACT_ADDRESS":"0x..",
+}

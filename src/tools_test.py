@@ -41,7 +41,8 @@ async def test_finalize_tool(Basetool):
 @pytest.mark.asyncio
 async def test_refund_tool(Basetool):
     out = await Basetool["refund_funds"].coroutine(5, "refund")
-    assert "Refunded escrow 5 with reason refund" in out
+    tx = b"\x34"*32
+    assert f"Refunded escrow 5 with reason 'refund', tx={tx.hex()}" in out
 
 
 """
